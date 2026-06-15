@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>古代兵营士兵膳食营养监测与疫病预警系统</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <script src="force_layout.js"></script>
+    <script src="BarrackMap.js"></script>
+    <script src="NutritionLegend.js"></script>
     <style>
         * {
             margin: 0;
@@ -422,24 +423,7 @@
         <div class="panel" style="padding: 0; overflow: hidden;">
             <div class="canvas-container">
                 <canvas id="barracksCanvas"></canvas>
-                <div class="canvas-overlay">
-                    <div class="legend-item">
-                        <div class="legend-dot" style="background: #81c784;"></div>
-                        <span>低风险</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-dot" style="background: #ffd54f;"></div>
-                        <span>中风险</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-dot" style="background: #ff8a65;"></div>
-                        <span>高风险</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-dot" style="background: #ef5350;"></div>
-                        <span>严重</span>
-                    </div>
-                </div>
+                <div id="nutritionLegend" class="canvas-overlay"></div>
                 <div class="toolbar">
                     <button class="btn" onclick="refreshData()">🔄 刷新</button>
                     <button class="btn primary" onclick="runNutritionPrediction()">🧪 营养预测</button>
@@ -471,7 +455,8 @@
         let allBarracks = [];
         let currentBarracksId = null;
         let dashboardSummary = null;
-        let forceLayout = null;
+        let barrackMap = null;
+        let nutritionLegend = null;
 
         async function fetchData(url) {
             try {
@@ -603,20 +588,43 @@
             const barracks = allBarracks.find(b => b.id === currentBarracksId);
             if (!barracks) return;
 
-            if (forceLayout) {
-                forceLayout.stop();
+            if (barrackMap) {
+                barrackMap.stop();
             }
 
-            forceLayout = new ForceLayoutManager(canvas, {
+            barrackMap = new BarrackMap(canvas, {
                 padding: 60,
                 nodeRadius: 6,
                 collisionPadding: 3,
                 chargeStrength: -15,
                 alphaDecay: 0.04,
                 alphaMin: 0.005,
-                velocityDecay: 0.4
+                velocityDecay: 0.4,
+                onSoldierClick: (soldier) => {
+                    if (soldier) {
+                        showSoldierDetail(soldier);
+                    } else {
+                        hideSoldierDetail();
+                    }
+                }
             });
-            forceLayout.init(allSoldiers, barracks, allBarracks);
+            barrackMap.setData(allSoldiers, barracks);
+
+            if (!nutritionLegend) {
+                const legendContainer = document.getElementById('nutritionLegend');
+                if (legendContainer) {
+                    nutritionLegend = new NutritionLegend(legendContainer, {
+                        layout: 'horizontal',
+                        showCounts: true,
+                        interactive: false
+                    });
+                }
+            }
+            if (nutritionLegend) {
+                nutritionLegend.setData(barrackMap.getStats());
+            }
+
+            renderHighRiskSoldiers(allSoldiers.filter(s => s.riskLevel === 'HIGH' || s.riskLevel === 'CRITICAL'));
         }
 
         function showSoldierDetail(soldier) {
@@ -722,31 +730,6 @@
                 await loadSoldiers(currentBarracksId);
             }
         }
-
-        document.getElementById('barracksCanvas').addEventListener('click', function(e) {
-            const rect = this.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-
-            if (forceLayout) {
-                const soldier = forceLayout.getSoldierAt(x, y);
-                if (soldier) {
-                    showSoldierDetail(soldier);
-                    return;
-                }
-            }
-            hideSoldierDetail();
-        });
-
-        document.getElementById('barracksCanvas').addEventListener('mousemove', function(e) {
-            const rect = this.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-
-            if (forceLayout) {
-                this.style.cursor = forceLayout.isHovering(x, y) ? 'pointer' : 'default';
-            }
-        });
 
         window.addEventListener('resize', () => {
             if (allSoldiers.length > 0) renderCanvas();
