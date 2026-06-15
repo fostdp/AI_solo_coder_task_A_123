@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>古代兵营士兵膳食营养监测与疫病预警系统</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #e8e8e8;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(90deg, rgba(139, 69, 19, 0.9), rgba(101, 67, 33, 0.9));
+            padding: 16px 32px;
+            border-bottom: 3px solid #d4a574;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .header h1 {
+            font-size: 24px;
+            color: #f5deb3;
+            letter-spacing: 2px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .header .subtitle {
+            font-size: 13px;
+            color: #deb887;
+            margin-top: 4px;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 320px 1fr 360px;
+            gap: 16px;
+            padding: 16px;
+            height: calc(100vh - 80px);
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(212, 165, 116, 0.3);
+            border-radius: 8px;
+            padding: 16px;
+            backdrop-filter: blur(10px);
+            overflow-y: auto;
+        }
+
+        .panel-title {
+            font-size: 16px;
+            color: #d4a574;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(212, 165, 116, 0.3);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            padding: 12px;
+            text-align: center;
+            border: 1px solid rgba(212, 165, 116, 0.2);
+        }
+
+        .stat-card .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #f5deb3;
+        }
+
+        .stat-card .label {
+            font-size: 11px;
+            color: #a9a9a9;
+            margin-top: 4px;
+        }
+
+        .barracks-item {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(212, 165, 116, 0.2);
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .barracks-item:hover, .barracks-item.active {
+            background: rgba(212, 165, 116, 0.15);
+            border-color: #d4a574;
+        }
+
+        .barracks-item .name {
+            font-size: 14px;
+            color: #f5deb3;
+            font-weight: 500;
+        }
+
+        .barracks-item .meta {
+            font-size: 11px;
+            color: #a9a9a9;
+            margin-top: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .risk-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        .risk-LOW { background: rgba(76, 175, 80, 0.3); color: #81c784; }
+        .risk-MEDIUM { background: rgba(255, 193, 7, 0.3); color: #ffd54f; }
+        .risk-HIGH { background: rgba(255, 87, 34, 0.3); color: #ff8a65; }
+        .risk-CRITICAL { background: rgba(244, 67, 54, 0.4); color: #ef5350; }
+
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        #barracksCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .canvas-overlay {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            border: 1px solid rgba(212, 165, 116, 0.3);
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .toolbar {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            background: rgba(139, 69, 19, 0.8);
+            color: #f5deb3;
+            border: 1px solid #d4a574;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: rgba(139, 69, 19, 1);
+            transform: translateY(-1px);
+        }
+
+        .btn.primary {
+            background: linear-gradient(135deg, #8b4513, #a0522d);
+        }
+
+        .soldier-popup {
+            position: absolute;
+            background: rgba(20, 20, 35, 0.98);
+            border: 2px solid #d4a574;
+            border-radius: 8px;
+            padding: 16px;
+            min-width: 300px;
+            max-width: 380px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            display: none;
+        }
+
+        .soldier-popup .close-btn {
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            background: none;
+            border: none;
+            color: #a9a9a9;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        .soldier-popup h3 {
+            color: #f5deb3;
+            font-size: 16px;
+            margin-bottom: 12px;
+            padding-right: 24px;
+        }
+
+        .popup-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(212, 165, 116, 0.1);
+            font-size: 13px;
+        }
+
+        .popup-row .label {
+            color: #a9a9a9;
+        }
+
+        .popup-row .value {
+            color: #f5deb3;
+            font-weight: 500;
+        }
+
+        .popup-section {
+            margin-top: 12px;
+        }
+
+        .popup-section-title {
+            color: #d4a574;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid rgba(212, 165, 116, 0.3);
+        }
+
+        .nutrient-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 6px 0;
+        }
+
+        .nutrient-bar .name {
+            width: 70px;
+            font-size: 11px;
+            color: #a9a9a9;
+        }
+
+        .nutrient-bar .bar-bg {
+            flex: 1;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .nutrient-bar .bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .nutrient-bar .val {
+            width: 60px;
+            text-align: right;
+            font-size: 11px;
+            color: #f5deb3;
+        }
+
+        .dietary-suggestion {
+            background: rgba(212, 165, 116, 0.1);
+            border-left: 3px solid #d4a574;
+            padding: 10px 12px;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #d4c4a8;
+            border-radius: 0 4px 4px 0;
+            white-space: pre-line;
+        }
+
+        .alert-list-item {
+            background: rgba(244, 67, 54, 0.1);
+            border: 1px solid rgba(244, 67, 54, 0.3);
+            border-left: 3px solid #ef5350;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 8px;
+        }
+
+        .alert-list-item.warning {
+            background: rgba(255, 152, 0, 0.1);
+            border-color: rgba(255, 152, 0, 0.3);
+            border-left-color: #ffa726;
+        }
+
+        .alert-list-item .title {
+            font-size: 13px;
+            color: #ffab91;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .alert-list-item.warning .title {
+            color: #ffcc80;
+        }
+
+        .alert-list-item .desc {
+            font-size: 11px;
+            color: #a9a9a9;
+            line-height: 1.5;
+        }
+
+        .alert-list-item .time {
+            font-size: 10px;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #a9a9a9;
+            font-size: 14px;
+        }
+
+        .loading::after {
+            content: '';
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(212, 165, 116, 0.3);
+            border-top-color: #d4a574;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #888;
+            padding: 20px;
+            font-size: 12px;
+        }
+
+        .d3-tooltip {
+            position: absolute;
+            padding: 8px 12px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid #d4a574;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #f5deb3;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 999;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🏯 古代兵营士兵膳食营养监测与疫病预警系统</h1>
+        <div class="subtitle">汉代居延遗址复原 · 实时监测 · 智能预警</div>
+    </div>
+
+    <div class="container">
+        <div class="panel">
+            <div class="panel-title">📊 系统概览</div>
+            <div id="statsContainer" class="stat-grid">
+                <div class="stat-card"><div class="value">-</div><div class="label">兵营总数</div></div>
+                <div class="stat-card"><div class="value">-</div><div class="label">士兵总数</div></div>
+                <div class="stat-card"><div class="value" style="color:#ef5350;">-</div><div class="label">高风险</div></div>
+                <div class="stat-card"><div class="value" style="color:#ffab91;">-</div><div class="label">活跃告警</div></div>
+            </div>
+
+            <div class="panel-title">🏛 兵营列表</div>
+            <div id="barracksList"></div>
+
+            <div class="panel-title">⚠️ 营养风险分布</div>
+            <div id="riskDistribution" style="padding: 8px 0;"></div>
+        </div>
+
+        <div class="panel" style="padding: 0; overflow: hidden;">
+            <div class="canvas-container">
+                <canvas id="barracksCanvas"></canvas>
+                <div class="canvas-overlay">
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background: #81c784;"></div>
+                        <span>低风险</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background: #ffd54f;"></div>
+                        <span>中风险</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background: #ff8a65;"></div>
+                        <span>高风险</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background: #ef5350;"></div>
+                        <span>严重</span>
+                    </div>
+                </div>
+                <div class="toolbar">
+                    <button class="btn" onclick="refreshData()">🔄 刷新</button>
+                    <button class="btn primary" onclick="runNutritionPrediction()">🧪 营养预测</button>
+                    <button class="btn primary" onclick="runEpidemicScan()">🔬 疫情扫描</button>
+                </div>
+                <div id="soldierPopup" class="soldier-popup"></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-title">🚨 疫情预警</div>
+            <div id="epidemicAlerts"></div>
+
+            <div class="panel-title">💉 高风险士兵</div>
+            <div id="highRiskSoldiers"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080/api';
+        const RISK_COLORS = {
+            LOW: '#81c784',
+            MEDIUM: '#ffd54f',
+            HIGH: '#ff8a65',
+            CRITICAL: '#ef5350'
+        };
+
+        let allSoldiers = [];
+        let allBarracks = [];
+        let currentBarracksId = null;
+        let dashboardSummary = null;
+
+        async function fetchData(url) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return await response.json();
+            } catch (e) {
+                console.error('请求失败:', url, e);
+                return null;
+            }
+        }
+
+        async function loadDashboardSummary() {
+            const data = await fetchData(`${API_BASE}/v1/dashboard/summary`);
+            if (data) {
+                dashboardSummary = data;
+                document.querySelector('#statsContainer').innerHTML = `
+                    <div class="stat-card"><div class="value">${data.totalBarracks}</div><div class="label">兵营总数</div></div>
+                    <div class="stat-card"><div class="value">${data.totalSoldiers}</div><div class="label">士兵总数</div></div>
+                    <div class="stat-card"><div class="value" style="color:#ef5350;">${data.highRiskCount}</div><div class="label">高风险</div></div>
+                    <div class="stat-card"><div class="value" style="color:#ffab91;">${data.activeEpidemicAlerts}</div><div class="label">活跃告警</div></div>
+                `;
+
+                const rs = data.nutritionRiskStats || {};
+                document.getElementById('riskDistribution').innerHTML = `
+                    <div style="display:flex;gap:4px;margin-bottom:8px;">
+                        <div style="flex:${rs.LOW||1};height:24px;background:#81c784;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#1a1a2e;font-weight:bold;">${rs.LOW||0}</div>
+                        <div style="flex:${rs.MEDIUM||1};height:24px;background:#ffd54f;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#1a1a2e;font-weight:bold;">${rs.MEDIUM||0}</div>
+                        <div style="flex:${rs.HIGH||1};height:24px;background:#ff8a65;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#1a1a2e;font-weight:bold;">${rs.HIGH||0}</div>
+                        <div style="flex:${rs.CRITICAL||1};height:24px;background:#ef5350;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:bold;">${rs.CRITICAL||0}</div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:10px;color:#888;">
+                        <span>低风险</span><span>中</span><span>高</span><span>严重</span>
+                    </div>
+                `;
+            }
+        }
+
+        async function loadBarracks() {
+            const data = await fetchData(`${API_BASE}/v1/barracks`);
+            if (data) {
+                allBarracks = data;
+                const listEl = document.getElementById('barracksList');
+                listEl.innerHTML = data.map((b, idx) => `
+                    <div class="barracks-item ${idx === 0 ? 'active' : ''}" data-id="${b.id}" onclick="selectBarracks(${b.id}, this)">
+                        <div class="name">${b.name}</div>
+                        <div class="meta">
+                            <span>编号: ${b.code}</span>
+                            <span>容量: ${b.capacity}人</span>
+                        </div>
+                    </div>
+                `).join('');
+                if (data.length > 0) {
+                    currentBarracksId = data[0].id;
+                    loadSoldiers(currentBarracksId);
+                }
+            }
+        }
+
+        async function loadSoldiers(barracksId) {
+            const data = await fetchData(`${API_BASE}/v1/barracks/${barracksId}/soldiers/with-risk`);
+            if (data) {
+                allSoldiers = data;
+                renderCanvas();
+                renderHighRiskSoldiers(data.filter(s => s.riskLevel === 'HIGH' || s.riskLevel === 'CRITICAL'));
+            }
+        }
+
+        async function loadEpidemicAlerts() {
+            const data = await fetchData(`${API_BASE}/v1/epidemic-alerts?status=ACTIVE`);
+            const el = document.getElementById('epidemicAlerts');
+            if (!data || data.length === 0) {
+                el.innerHTML = '<div class="empty-state">✅ 当前无活跃疫情预警</div>';
+                return;
+            }
+            const barracksMap = {};
+            allBarracks.forEach(b => barracksMap[b.id] = b);
+            el.innerHTML = data.map(a => {
+                const barracks = barracksMap[a.barracksId] || { name: '未知兵营' };
+                const isCritical = a.alertLevel === 'CRITICAL';
+                const rate = (a.positiveRate * 100).toFixed(1);
+                return `
+                    <div class="alert-list-item ${isCritical ? '' : 'warning'}">
+                        <div class="title">
+                            <span class="risk-badge risk-${a.alertLevel}">${a.alertLevel === 'CRITICAL' ? '严重' : a.alertLevel === 'HIGH' ? '高危' : '中等'}</span>
+                            ${barracks.name}
+                        </div>
+                        <div class="desc">
+                            阳性率: ${rate}% (${a.affectedCount}/${a.totalCount})<br>
+                            ${a.description ? a.description.substring(0, 80) + '...' : ''}
+                        </div>
+                        <div class="time">${new Date(a.createdAt).toLocaleString('zh-CN')}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderHighRiskSoldiers(soldiers) {
+            const el = document.getElementById('highRiskSoldiers');
+            if (!soldiers || soldiers.length === 0) {
+                el.innerHTML = '<div class="empty-state">✅ 当前无高风险士兵</div>';
+                return;
+            }
+            soldiers.sort((a, b) => (b.overallRiskScore || 0) - (a.overallRiskScore || 0));
+            el.innerHTML = soldiers.slice(0, 10).map(s => `
+                <div class="alert-list-item ${s.riskLevel === 'CRITICAL' ? '' : 'warning'}" style="cursor:pointer;" onclick="showSoldierDetail(${JSON.stringify(s).replace(/"/g, '&quot;')})">
+                    <div class="title">
+                        <span class="risk-badge risk-${s.riskLevel}">${s.riskLevel === 'CRITICAL' ? '严重' : '高危'}</span>
+                        ${s.name} (${s.soldierCode})
+                    </div>
+                    <div class="desc">
+                        维C风险: ${((s.vitaminCRiskScore || 0) * 100).toFixed(0)}% | 
+                        蛋白: ${(s.dailyProteinG || 0).toFixed(0)}g | 
+                        维C: ${(s.dailyVitaminCMg || 0).toFixed(0)}mg
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function selectBarracks(id, el) {
+            document.querySelectorAll('.barracks-item').forEach(i => i.classList.remove('active'));
+            el.classList.add('active');
+            currentBarracksId = id;
+            loadSoldiers(id);
+        }
+
+        function renderCanvas() {
+            const canvas = document.getElementById('barracksCanvas');
+            const container = canvas.parentElement;
+            const rect = container.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            const ctx = canvas.getContext('2d');
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const barracks = allBarracks.find(b => b.id === currentBarracksId);
+            if (!barracks) return;
+
+            const padding = 60;
+            const drawWidth = canvas.width - padding * 2;
+            const drawHeight = canvas.height - padding * 2;
+
+            ctx.fillStyle = 'rgba(139, 69, 19, 0.15)';
+            ctx.strokeStyle = '#d4a574';
+            ctx.lineWidth = 3;
+            roundRect(ctx, padding, padding, drawWidth, drawHeight, 12, true, true);
+
+            ctx.fillStyle = '#d4a574';
+            ctx.font = 'bold 16px Microsoft YaHei';
+            ctx.textAlign = 'center';
+            ctx.fillText(barracks.name, canvas.width / 2, padding - 20);
+
+            ctx.strokeStyle = 'rgba(212, 165, 116, 0.15)';
+            ctx.lineWidth = 1;
+            const gridSize = 40;
+            for (let x = padding; x <= padding + drawWidth; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, padding);
+                ctx.lineTo(x, padding + drawHeight);
+                ctx.stroke();
+            }
+            for (let y = padding; y <= padding + drawHeight; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(padding, y);
+                ctx.lineTo(padding + drawWidth, y);
+                ctx.stroke();
+            }
+
+            const areas = [
+                { name: '营房A', x: 0.1, y: 0.1, w: 0.35, h: 0.35 },
+                { name: '营房B', x: 0.55, y: 0.1, w: 0.35, h: 0.35 },
+                { name: '食堂', x: 0.1, y: 0.55, w: 0.35, h: 0.3 },
+                { name: '校场', x: 0.55, y: 0.55, w: 0.35, h: 0.3 },
+                { name: '指挥所', x: 0.4, y: 0.4, w: 0.2, h: 0.15 }
+            ];
+
+            areas.forEach(area => {
+                const ax = padding + drawWidth * area.x;
+                const ay = padding + drawHeight * area.y;
+                const aw = drawWidth * area.w;
+                const ah = drawHeight * area.h;
+
+                ctx.fillStyle = 'rgba(212, 165, 116, 0.08)';
+                ctx.strokeStyle = 'rgba(212, 165, 116, 0.4)';
+                ctx.lineWidth = 1;
+                roundRect(ctx, ax, ay, aw, ah, 6, true, true);
+
+                ctx.fillStyle = 'rgba(212, 165, 116, 0.7)';
+                ctx.font = '11px Microsoft YaHei';
+                ctx.textAlign = 'center';
+                ctx.fillText(area.name, ax + aw / 2, ay + 16);
+            });
+
+            canvas._soldierPositions = [];
+            allSoldiers.forEach((soldier, idx) => {
+                const baseX = (soldier.positionX || 50) / 200;
+                const baseY = (soldier.positionY || 50) / 200;
+                const jitterX = (Math.sin(idx * 12.9898) * 43758.5453) % 1;
+                const jitterY = (Math.sin(idx * 78.233) * 43758.5453) % 1;
+                const px = padding + drawWidth * (0.05 + baseX * 0.9 + Math.abs(jitterX) * 0.02);
+                const py = padding + drawHeight * (0.05 + baseY * 0.9 + Math.abs(jitterY) * 0.02);
+                const color = RISK_COLORS[soldier.riskLevel] || RISK_COLORS.LOW;
+                const riskScore = soldier.overallRiskScore || 0;
+                const radius = 4 + riskScore * 4;
+
+                const gradient = ctx.createRadialGradient(px, py, 0, px, py, radius * 2);
+                gradient.addColorStop(0, color);
+                gradient.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(px, py, radius * 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = color;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(px, py, radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                canvas._soldierPositions.push({ x: px, y: py, soldier, radius });
+            });
+        }
+
+        function roundRect(ctx, x, y, w, h, r, fill, stroke) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+            if (fill) ctx.fill();
+            if (stroke) ctx.stroke();
+        }
+
+        function showSoldierDetail(soldier) {
+            const popup = document.getElementById('soldierPopup');
+            const proteinPct = Math.min(100, ((soldier.dailyProteinG || 0) / 70) * 100);
+            const fatPct = Math.min(100, ((soldier.dailyFatG || 0) / 60) * 100);
+            const vitaminCPct = Math.min(100, ((soldier.dailyVitaminCMg || 0) / 80) * 100);
+            const caloriePct = Math.min(100, ((soldier.dailyCalorieKcal || 0) / 3500) * 100);
+
+            popup.innerHTML = `
+                <button class="close-btn" onclick="hideSoldierDetail()">×</button>
+                <h3>${soldier.name} <span class="risk-badge risk-${soldier.riskLevel}" style="margin-left:8px;">${soldier.riskLevel === 'CRITICAL' ? '严重风险' : soldier.riskLevel === 'HIGH' ? '高风险' : soldier.riskLevel === 'MEDIUM' ? '中风险' : '低风险'}</span></h3>
+                <div class="popup-row"><span class="label">士兵编号</span><span class="value">${soldier.soldierCode}</span></div>
+                <div class="popup-row"><span class="label">年龄</span><span class="value">${soldier.age}岁</span></div>
+                <div class="popup-row"><span class="label">军衔</span><span class="value">${soldier.rank || '士卒'}</span></div>
+                <div class="popup-row"><span class="label">综合风险评分</span><span class="value" style="color:${RISK_COLORS[soldier.riskLevel]}">${((soldier.overallRiskScore || 0) * 100).toFixed(1)}%</span></div>
+
+                <div class="popup-section">
+                    <div class="popup-section-title">📋 今日营养摄入</div>
+                    <div class="nutrient-bar">
+                        <span class="name">蛋白质</span>
+                        <div class="bar-bg"><div class="bar-fill" style="width:${proteinPct}%;background:${proteinPct < 70 ? '#ef5350' : '#81c784'}"></div></div>
+                        <span class="val">${(soldier.dailyProteinG || 0).toFixed(1)}g</span>
+                    </div>
+                    <div class="nutrient-bar">
+                        <span class="name">脂肪</span>
+                        <div class="bar-bg"><div class="bar-fill" style="width:${fatPct}%;background:${fatPct < 60 ? '#ffab91' : '#81c784'}"></div></div>
+                        <span class="val">${(soldier.dailyFatG || 0).toFixed(1)}g</span>
+                    </div>
+                    <div class="nutrient-bar">
+                        <span class="name">维生素C</span>
+                        <div class="bar-bg"><div class="bar-fill" style="width:${vitaminCPct}%;background:${vitaminCPct < 75 ? '#ef5350' : '#81c784'}"></div></div>
+                        <span class="val">${(soldier.dailyVitaminCMg || 0).toFixed(1)}mg</span>
+                    </div>
+                    <div class="nutrient-bar">
+                        <span class="name">热量</span>
+                        <div class="bar-bg"><div class="bar-fill" style="width:${caloriePct}%;background:${caloriePct < 70 ? '#ffab91' : '#81c784'}"></div></div>
+                        <span class="val">${(soldier.dailyCalorieKcal || 0).toFixed(0)}kcal</span>
+                    </div>
+                </div>
+
+                <div class="popup-section">
+                    <div class="popup-section-title">📊 分项风险评分</div>
+                    <div class="nutrient-bar">
+                        <span class="name">蛋白风险</span>
+                        <div class="bar-bg"><div class="bar-fill" style="width:${(soldier.proteinRiskScore||0)*100}%;background:#ffab91"></div></div>
+                        <span class="val">${((soldier.proteinRiskScore||0)*100).toFixed(0)}%</span>
+                    </div>
+                    <div class="nutrient-bar">
+                        <span class="name">脂肪风险</span>
+                        <div class="bar-bg"><div class="bar-fill" style="width:${(soldier.fatRiskScore||0)*100}%;background:#ffab91"></div></div>
+                        <span class="val">${((soldier.fatRiskScore||0)*100).toFixed(0)}%</span>
+                    </div>
+                    <div class="nutrient-bar">
+                        <span class="name">维C风险</span>
+                        <div class="bar-bg"><div class="bar-fill" style="width:${(soldier.vitaminCRiskScore||0)*100}%;background:#ef5350"></div></div>
+                        <span class="val">${((soldier.vitaminCRiskScore||0)*100).toFixed(0)}%</span>
+                    </div>
+                </div>
+
+                <div class="popup-section">
+                    <div class="popup-section-title">🥗 膳食改进建议</div>
+                    <div class="dietary-suggestion">${soldier.dietarySuggestion || '当前膳食结构基本合理。'}</div>
+                </div>
+            `;
+
+            popup.style.display = 'block';
+            const canvas = document.getElementById('barracksCanvas');
+            popup.style.left = Math.min(canvas.width - 400, 40) + 'px';
+            popup.style.top = '40px';
+        }
+
+        function hideSoldierDetail() {
+            document.getElementById('soldierPopup').style.display = 'none';
+        }
+
+        async function runNutritionPrediction() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = '⏳ 运行中...';
+            await fetch(`${API_BASE}/v1/nutrition-prediction/run`, { method: 'POST' });
+            alert('✅ 营养预测任务已完成！');
+            btn.disabled = false;
+            btn.textContent = '🧪 营养预测';
+            refreshData();
+        }
+
+        async function runEpidemicScan() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = '⏳ 扫描中...';
+            await fetch(`${API_BASE}/v1/epidemic-scan/run`, { method: 'POST' });
+            alert('✅ 疫情扫描任务已完成！');
+            btn.disabled = false;
+            btn.textContent = '🔬 疫情扫描';
+            refreshData();
+        }
+
+        async function refreshData() {
+            await loadDashboardSummary();
+            await loadEpidemicAlerts();
+            if (currentBarracksId) {
+                await loadSoldiers(currentBarracksId);
+            }
+        }
+
+        document.getElementById('barracksCanvas').addEventListener('click', function(e) {
+            const rect = this.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const positions = this._soldierPositions || [];
+            for (const pos of positions) {
+                const dist = Math.sqrt((x - pos.x) ** 2 + (y - pos.y) ** 2);
+                if (dist <= pos.radius + 4) {
+                    showSoldierDetail(pos.soldier);
+                    return;
+                }
+            }
+            hideSoldierDetail();
+        });
+
+        document.getElementById('barracksCanvas').addEventListener('mousemove', function(e) {
+            const rect = this.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const positions = this._soldierPositions || [];
+            let hovered = false;
+            for (const pos of positions) {
+                const dist = Math.sqrt((x - pos.x) ** 2 + (y - pos.y) ** 2);
+                if (dist <= pos.radius + 4) {
+                    this.style.cursor = 'pointer';
+                    hovered = true;
+                    break;
+                }
+            }
+            if (!hovered) this.style.cursor = 'default';
+        });
+
+        window.addEventListener('resize', () => {
+            if (allSoldiers.length > 0) renderCanvas();
+        });
+
+        (async function init() {
+            await loadDashboardSummary();
+            await loadBarracks();
+            await loadEpidemicAlerts();
+            setInterval(refreshData, 60000);
+        })();
+    </script>
+</body>
+</html>
