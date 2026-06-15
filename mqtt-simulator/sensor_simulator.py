@@ -2,16 +2,23 @@
 古代兵营士兵膳食营养监测与疫病预警系统 - MQTT传感器数据模拟器
 
 模拟设备:
-- 营养分析仪: 15台（检测蛋白质、脂肪、维生素C）
-- 粪便隐血传感器: 10台（监测肠道感染）
+- 营养分析仪: 5台（检测蛋白质、脂肪、维生素C）
+- 粪便隐血传感器: 5台（监测肠道感染）
 
 上报频率: 每2小时
+士兵总数: 25名（5座兵营各5名）
+
+用法:
+  python sensor_simulator.py continuous [host] [port] [interval] [--scurvy=1]
+  python sensor_simulator.py single [host] [port]
+  python sensor_simulator.py historical [host] [port] [days]
 """
 
 import json
 import random
 import time
 import math
+import argparse
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
@@ -32,17 +39,19 @@ class BarracksConfig:
     ]
 
     SOLDIER_CODES_PER_BARRACKS = {
-        "BARRACKS_001": [f"S001_{str(i).zfill(3)}" for i in range(1, 51)],
-        "BARRACKS_002": [f"S002_{str(i).zfill(3)}" for i in range(1, 41)],
-        "BARRACKS_003": [f"S003_{str(i).zfill(3)}" for i in range(1, 46)],
-        "BARRACKS_004": [f"S004_{str(i).zfill(3)}" for i in range(1, 36)],
-        "BARRACKS_005": [f"S005_{str(i).zfill(3)}" for i in range(1, 31)],
+        code: [f"{code}_S{str(i).zfill(3)}" for i in range(1, 6)]
+        for code in BARRACKS_CODES
     }
+
+    @classmethod
+    def total_soldiers(cls):
+        return sum(len(v) for v in cls.SOLDIER_CODES_PER_BARRACKS.values())
 
 
 class NutritionSensorSimulator:
-    def __init__(self, num_sensors: int = 15):
+    def __init__(self, num_sensors: int = 5, scurvy_mode: bool = False):
         self.num_sensors = num_sensors
+        self.scurvy_mode = scurvy_mode
         self.sensor_ids = [f"NUT-S{str(i).zfill(3)}" for i in range(1, num_sensors + 1)]
         self.barracks_distribution = self._distribute_sensors()
 
@@ -56,22 +65,24 @@ class NutritionSensorSimulator:
             distribution[barracks_code].append(sensor_id)
         return distribution
 
-    def generate_reading(self, sensor_id: str, barracks_code: str, simulate_abnormal: bool = False):
+    def generate_reading(self, sensor_id: str, barracks_code: str,
+                         simulate_abnormal: bool = False):
         soldier_codes = BarracksConfig.SOLDIER_CODES_PER_BARRACKS.get(barracks_code, [])
         soldier_code = random.choice(soldier_codes) if soldier_codes else None
 
         if simulate_abnormal:
             protein_g = round(random.uniform(5, 25), 2)
             fat_g = round(random.uniform(3, 15), 2)
-            vitamin_c_mg = round(random.uniform(5, 45), 2)
+            vitamin_c_mg = round(random.uniform(3, 25), 2)
         else:
             protein_g = round(random.uniform(20, 55), 2)
             fat_g = round(random.uniform(15, 45), 2)
             vitamin_c_mg = round(random.uniform(40, 120), 2)
 
-        if barracks_code == "BARRACKS_003" and random.random() < 0.35:
-            vitamin_c_mg = round(random.uniform(10, 50), 2)
-            protein_g = round(random.uniform(10, 35), 2)
+        if self.scurvy_mode:
+            vitamin_c_mg = round(random.uniform(2, 35), 2)
+            if random.random() < 0.6:
+                protein_g = round(random.uniform(8, 30), 2)
 
         return {
             "sensorId": sensor_id,
@@ -96,7 +107,7 @@ class NutritionSensorSimulator:
 
 
 class FecalSensorSimulator:
-    def __init__(self, num_sensors: int = 10):
+    def __init__(self, num_sensors: int = 5):
         self.num_sensors = num_sensors
         self.sensor_ids = [f"FEC-S{str(i).zfill(3)}" for i in range(1, num_sensors + 1)]
         self.barracks_distribution = self._distribute_sensors()
@@ -111,7 +122,8 @@ class FecalSensorSimulator:
             distribution[barracks_code].append(sensor_id)
         return distribution
 
-    def generate_reading(self, sensor_id: str, barracks_code: str, outbreak_mode: bool = False):
+    def generate_reading(self, sensor_id: str, barracks_code: str,
+                         outbreak_mode: bool = False):
         soldier_codes = BarracksConfig.SOLDIER_CODES_PER_BARRACKS.get(barracks_code, [])
         soldier_code = random.choice(soldier_codes) if soldier_codes else None
 
@@ -119,9 +131,6 @@ class FecalSensorSimulator:
             is_positive = random.random() < 0.55
         else:
             is_positive = random.random() < 0.05
-
-        if barracks_code == "BARRACKS_001":
-            is_positive = random.random() < 0.30
 
         return {
             "sensorId": sensor_id,
@@ -144,11 +153,11 @@ class FecalSensorSimulator:
 
 class MqttSimulator:
     def __init__(self, broker_host: str = "localhost", broker_port: int = 1883,
-                 username: str = "admin", password: str = "public"):
+                 username: str = "admin", password: str = "public",
+                 scurvy_mode: bool = False):
         self.broker_host = broker_host
         self.broker_port = broker_port
-        self.username = username
-        self.password = password
+        self.scurvy_mode = scurvy_mode
 
         self.client = mqtt.Client(
             client_id=f"barracks-simulator-{random.randint(1000, 9999)}",
@@ -159,8 +168,8 @@ class MqttSimulator:
         self.client.on_disconnect = self._on_disconnect
         self.client.on_publish = self._on_publish
 
-        self.nutrition_sim = NutritionSensorSimulator(num_sensors=15)
-        self.fecal_sim = FecalSensorSimulator(num_sensors=10)
+        self.nutrition_sim = NutritionSensorSimulator(num_sensors=5, scurvy_mode=scurvy_mode)
+        self.fecal_sim = FecalSensorSimulator(num_sensors=5)
 
         self.message_count = 0
         self.connected = False
@@ -206,8 +215,9 @@ class MqttSimulator:
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
                 published += 1
 
+        scurvy_tag = " 🍋[坏血病模式]" if self.scurvy_mode else ""
         print(f"  🍎 营养数据: {published}/{len(readings)} 条已发布 "
-              f"(异常兵营: {abnormal_barracks or '无'})")
+              f"(异常兵营: {abnormal_barracks or '无'}){scurvy_tag}")
 
     def publish_fecal_data(self, outbreak_barracks: Optional[str] = None):
         readings = self.fecal_sim.generate_all_readings(outbreak_barracks)
@@ -232,7 +242,7 @@ class MqttSimulator:
         abnormal_barracks = None
         outbreak_barracks = None
 
-        if simulate_events:
+        if simulate_events and not self.scurvy_mode:
             if cycle_num % 5 == 0:
                 abnormal_barracks = "BARRACKS_003"
                 print("  ⚠️  模拟事件: 第三兵营营养摄入不足")
@@ -248,31 +258,24 @@ class MqttSimulator:
 
 
 def run_continuous(broker_host: str = "localhost", broker_port: int = 1883,
-                   interval_seconds: int = 7200, num_cycles: int = 0):
-    """
-    持续运行模拟器
-
-    Args:
-        broker_host: MQTT Broker地址
-        broker_port: MQTT Broker端口
-        interval_seconds: 上报间隔（秒），默认7200秒=2小时
-        num_cycles: 运行周期数，0表示无限
-    """
+                   interval_seconds: int = 7200, num_cycles: int = 0,
+                   scurvy_mode: bool = False):
     print("=" * 60)
     print("🏯 古代兵营士兵膳食营养监测与疫病预警系统")
     print("   MQTT传感器数据模拟器")
     print("=" * 60)
     print(f"  Broker: {broker_host}:{broker_port}")
     print(f"  上报间隔: {interval_seconds}秒 ({interval_seconds / 3600:.1f}小时)")
-    print(f"  营养分析仪: 15台")
-    print(f"  粪便隐血传感器: 10台")
-    print(f"  监测兵营: 5座")
+    print(f"  士兵总数: {BarracksConfig.total_soldiers()}名 (5座兵营各5名)")
+    print(f"  营养分析仪: 5台")
+    print(f"  粪便隐血传感器: 5台")
+    print(f"  坏血病注入: {'✅ 已启用 (维生素C<35mg/天)' if scurvy_mode else '❌ 未启用'}")
     print("=" * 60)
 
-    simulator = MqttSimulator(broker_host, broker_port)
+    simulator = MqttSimulator(broker_host, broker_port, scurvy_mode=scurvy_mode)
     if not simulator.connect():
         print("\n❌ 无法连接到MQTT Broker，请确认:")
-        print("   1. Mosquitto或其他MQTT Broker已启动")
+        print("   1. EMQX或其他MQTT Broker已启动")
         print("   2. 地址和端口正确")
         print("   3. 用户名密码正确")
         return
@@ -296,10 +299,10 @@ def run_continuous(broker_host: str = "localhost", broker_port: int = 1883,
         simulator.disconnect()
 
 
-def run_single_shot(broker_host: str = "localhost", broker_port: int = 1883):
-    """单次快速测试，发送一批数据"""
+def run_single_shot(broker_host: str = "localhost", broker_port: int = 1883,
+                    scurvy_mode: bool = False):
     print("🚀 单次快速上报测试模式")
-    simulator = MqttSimulator(broker_host, broker_port)
+    simulator = MqttSimulator(broker_host, broker_port, scurvy_mode=scurvy_mode)
     if not simulator.connect():
         return
 
@@ -311,16 +314,11 @@ def run_single_shot(broker_host: str = "localhost", broker_port: int = 1883):
     print("\n✅ 快速测试完成")
 
 
-def run_historical(broker_host: str = "localhost", broker_port: int = 1883, days: int = 7):
-    """
-    生成历史数据
-
-    Args:
-        days: 生成最近多少天的历史数据
-    """
+def run_historical(broker_host: str = "localhost", broker_port: int = 1883,
+                   days: int = 7, scurvy_mode: bool = False):
     print(f"📜 生成最近 {days} 天的历史模拟数据...")
 
-    simulator = MqttSimulator(broker_host, broker_port)
+    simulator = MqttSimulator(broker_host, broker_port, scurvy_mode=scurvy_mode)
     if not simulator.connect():
         return
 
@@ -361,26 +359,32 @@ def run_historical(broker_host: str = "localhost", broker_port: int = 1883, days
 
 
 if __name__ == "__main__":
-    import sys
+    parser = argparse.ArgumentParser(
+        description="古代兵营士兵膳食营养监测与疫病预警系统 - MQTT传感器模拟器"
+    )
+    parser.add_argument("mode", nargs="?", default="continuous",
+                        choices=["continuous", "single", "historical"],
+                        help="运行模式: continuous(持续) | single(单次) | historical(历史)")
+    parser.add_argument("--host", default="localhost", help="MQTT Broker地址")
+    parser.add_argument("--port", type=int, default=1883, help="MQTT Broker端口")
+    parser.add_argument("--interval", type=int, default=7200,
+                        help="上报间隔(秒), 默认7200=2小时")
+    parser.add_argument("--cycles", type=int, default=0,
+                        help="运行周期数, 0=无限")
+    parser.add_argument("--days", type=int, default=7,
+                        help="历史模式天数")
+    parser.add_argument("--scurvy", type=int, default=0,
+                        help="坏血病注入: 1=启用(维生素C<35mg/天), 0=禁用")
+    parser.add_argument("--username", default="admin", help="MQTT用户名")
+    parser.add_argument("--password", default="public", help="MQTT密码")
 
-    mode = "continuous"
-    if len(sys.argv) > 1:
-        mode = sys.argv[1]
+    args = parser.parse_args()
+    scurvy = args.scurvy == 1
 
-    host = "localhost"
-    port = 1883
-    if len(sys.argv) > 2:
-        host = sys.argv[2]
-    if len(sys.argv) > 3:
-        port = int(sys.argv[3])
-
-    if mode == "single":
-        run_single_shot(host, port)
-    elif mode == "historical":
-        days = int(sys.argv[4]) if len(sys.argv) > 4 else 7
-        run_historical(host, port, days)
+    if args.mode == "single":
+        run_single_shot(args.host, args.port, scurvy_mode=scurvy)
+    elif args.mode == "historical":
+        run_historical(args.host, args.port, args.days, scurvy_mode=scurvy)
     else:
-        interval = 60
-        if len(sys.argv) > 4:
-            interval = int(sys.argv[4])
-        run_continuous(host, port, interval_seconds=interval)
+        run_continuous(args.host, args.port, args.interval, args.cycles,
+                       scurvy_mode=scurvy)

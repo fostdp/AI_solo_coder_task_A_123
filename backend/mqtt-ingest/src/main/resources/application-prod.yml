@@ -12,3 +12,16 @@ spring:
 logging:
   file:
     path: ${LOG_PATH:/var/log/barracks/}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+  endpoint:
+    prometheus:
+      enabled: true
