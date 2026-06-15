@@ -69,6 +69,7 @@ public class SoldierService {
                 .name(soldier.getName())
                 .age(soldier.getAge())
                 .rank(soldier.getRank())
+                .originRegion(soldier.getOriginRegion())
                 .positionX(soldier.getPositionX())
                 .positionY(soldier.getPositionY())
                 .status(soldier.getStatus())

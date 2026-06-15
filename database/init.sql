@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS soldier (
     barracks_id BIGINT NOT NULL REFERENCES barracks(id),
     age INTEGER NOT NULL,
     rank VARCHAR(50),
+    origin_region VARCHAR(20) NOT NULL DEFAULT 'NORTH',
     position GEOMETRY(Point, 4326) NOT NULL,
     position_x INTEGER NOT NULL,
     position_y INTEGER NOT NULL,
@@ -168,13 +169,14 @@ ON CONFLICT (code) DO NOTHING;
 
 -- 初始化士兵数据（每个兵营若干士兵）
 -- 第一兵营
-INSERT INTO soldier (name, soldier_code, barracks_id, age, rank, position, position_x, position_y, status)
+INSERT INTO soldier (name, soldier_code, barracks_id, age, rank, origin_region, position, position_x, position_y, status)
 SELECT 
     '士兵张' || g,
     'S001_' || LPAD(g::TEXT, 3, '0'),
     1,
     20 + (g % 25),
     CASE WHEN g % 10 = 0 THEN '什长' WHEN g % 50 = 0 THEN '屯长' ELSE '士卒' END,
+    CASE WHEN g % 3 = 0 THEN 'NORTH' WHEN g % 3 = 1 THEN 'SOUTH' ELSE 'WEST' END,
     ST_SetSRID(ST_MakePoint(100.2700 + (g % 10) * 0.00005, 41.8500 + (g / 10) * 0.00005), 4326),
     50 + (g % 10) * 15,
     50 + (g / 10) * 15,
@@ -183,13 +185,14 @@ FROM generate_series(1, 50) g
 ON CONFLICT (soldier_code) DO NOTHING;
 
 -- 第二兵营
-INSERT INTO soldier (name, soldier_code, barracks_id, age, rank, position, position_x, position_y, status)
+INSERT INTO soldier (name, soldier_code, barracks_id, age, rank, origin_region, position, position_x, position_y, status)
 SELECT 
     '士兵李' || g,
     'S002_' || LPAD(g::TEXT, 3, '0'),
     2,
     20 + (g % 25),
     CASE WHEN g % 10 = 0 THEN '什长' WHEN g % 50 = 0 THEN '屯长' ELSE '士卒' END,
+    CASE WHEN g % 3 = 0 THEN 'NORTH' WHEN g % 3 = 1 THEN 'SOUTH' ELSE 'WEST' END,
     ST_SetSRID(ST_MakePoint(100.2710 + (g % 10) * 0.00005, 41.8520 + (g / 10) * 0.00005), 4326),
     50 + (g % 10) * 15,
     50 + (g / 10) * 15,
@@ -198,13 +201,14 @@ FROM generate_series(1, 40) g
 ON CONFLICT (soldier_code) DO NOTHING;
 
 -- 第三兵营
-INSERT INTO soldier (name, soldier_code, barracks_id, age, rank, position, position_x, position_y, status)
+INSERT INTO soldier (name, soldier_code, barracks_id, age, rank, origin_region, position, position_x, position_y, status)
 SELECT 
     '士兵王' || g,
     'S003_' || LPAD(g::TEXT, 3, '0'),
     3,
     20 + (g % 25),
     CASE WHEN g % 10 = 0 THEN '什长' WHEN g % 50 = 0 THEN '屯长' ELSE '士卒' END,
+    CASE WHEN g % 3 = 0 THEN 'NORTH' WHEN g % 3 = 1 THEN 'SOUTH' ELSE 'WEST' END,
     ST_SetSRID(ST_MakePoint(100.2730 + (g % 10) * 0.00005, 41.8510 + (g / 10) * 0.00005), 4326),
     50 + (g % 10) * 15,
     50 + (g / 10) * 15,
@@ -213,13 +217,14 @@ FROM generate_series(1, 45) g
 ON CONFLICT (soldier_code) DO NOTHING;
 
 -- 第四兵营
-INSERT INTO soldier (name, soldier_code, barracks_id, age, rank, position, position_x, position_y, status)
+INSERT INTO soldier (name, soldier_code, barracks_id, age, rank, origin_region, position, position_x, position_y, status)
 SELECT 
     '士兵赵' || g,
     'S004_' || LPAD(g::TEXT, 3, '0'),
     4,
     20 + (g % 25),
     CASE WHEN g % 10 = 0 THEN '什长' WHEN g % 50 = 0 THEN '屯长' ELSE '士卒' END,
+    CASE WHEN g % 3 = 0 THEN 'NORTH' WHEN g % 3 = 1 THEN 'SOUTH' ELSE 'WEST' END,
     ST_SetSRID(ST_MakePoint(100.2680 + (g % 9) * 0.00005, 41.8510 + (g / 9) * 0.00005), 4326),
     50 + (g % 9) * 15,
     50 + (g / 9) * 15,
@@ -228,13 +233,14 @@ FROM generate_series(1, 35) g
 ON CONFLICT (soldier_code) DO NOTHING;
 
 -- 第五兵营
-INSERT INTO soldier (name, soldier_code, barracks_id, age, rank, position, position_x, position_y, status)
+INSERT INTO soldier (name, soldier_code, barracks_id, age, rank, origin_region, position, position_x, position_y, status)
 SELECT 
     '士兵刘' || g,
     'S005_' || LPAD(g::TEXT, 3, '0'),
     5,
     20 + (g % 25),
     CASE WHEN g % 10 = 0 THEN '什长' WHEN g % 50 = 0 THEN '屯长' ELSE '士卒' END,
+    CASE WHEN g % 3 = 0 THEN 'NORTH' WHEN g % 3 = 1 THEN 'SOUTH' ELSE 'WEST' END,
     ST_SetSRID(ST_MakePoint(100.2710 + (g % 8) * 0.00005, 41.8510 + (g / 8) * 0.00005), 4326),
     50 + (g % 8) * 15,
     50 + (g / 8) * 15,

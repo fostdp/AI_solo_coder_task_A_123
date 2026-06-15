@@ -23,4 +23,12 @@ public class NutritionFeature {
     private BigDecimal avgProtein7d;
     private BigDecimal avgFat7d;
     private BigDecimal avgVitaminC7d;
+
+    private int ageGroupYoung;
+    private int ageGroupMiddle;
+    private int ageGroupSenior;
+
+    private int originNorth;
+    private int originSouth;
+    private int originWest;
 }

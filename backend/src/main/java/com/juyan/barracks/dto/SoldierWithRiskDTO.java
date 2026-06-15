@@ -17,6 +17,7 @@ public class SoldierWithRiskDTO {
     private String name;
     private Integer age;
     private String rank;
+    private String originRegion;
     private Integer positionX;
     private Integer positionY;
     private String status;

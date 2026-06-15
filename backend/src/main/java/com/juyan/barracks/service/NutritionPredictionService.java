@@ -103,6 +103,7 @@ public class NutritionPredictionService {
     private List<double[]> generateTrainingFeatures() {
         List<double[]> features = new ArrayList<>();
         Random random = new Random(42);
+        String[] origins = {"NORTH", "SOUTH", "WEST"};
 
         for (int i = 0; i < 500; i++) {
             double protein = 20 + random.nextDouble() * 80;
@@ -116,10 +117,43 @@ public class NutritionPredictionService {
             double avgFat7d = 10 + random.nextDouble() * 60;
             double avgVitaminC7d = 10 + random.nextDouble() * 150;
 
+            int ageGroupYoung = (age >= 18 && age <= 25) ? 1 : 0;
+            int ageGroupMiddle = (age >= 26 && age <= 35) ? 1 : 0;
+            int ageGroupSenior = (age >= 36) ? 1 : 0;
+
+            String origin = origins[random.nextInt(origins.length)];
+            int originNorth = "NORTH".equals(origin) ? 1 : 0;
+            int originSouth = "SOUTH".equals(origin) ? 1 : 0;
+            int originWest = "WEST".equals(origin) ? 1 : 0;
+
+            if (originNorth == 1) {
+                protein *= 1.15;
+                fat *= 1.2;
+                vitaminC *= 0.75;
+            } else if (originSouth == 1) {
+                protein *= 0.9;
+                fat *= 0.85;
+                vitaminC *= 1.25;
+            } else {
+                protein *= 0.95;
+                fat *= 1.0;
+                vitaminC *= 0.9;
+            }
+
+            if (ageGroupYoung == 1) {
+                protein *= 1.1;
+                calorieBurned *= 1.15;
+            } else if (ageGroupSenior == 1) {
+                protein *= 0.85;
+                calorieBurned *= 0.8;
+            }
+
             features.add(new double[]{
                     protein, fat, vitaminC, calorie,
                     calorieBurned, age, activityDays,
-                    avgProtein7d, avgFat7d, avgVitaminC7d
+                    avgProtein7d, avgFat7d, avgVitaminC7d,
+                    ageGroupYoung, ageGroupMiddle, ageGroupSenior,
+                    originNorth, originSouth, originWest
             });
         }
 
@@ -237,6 +271,16 @@ public class NutritionPredictionService {
         List<PhysicalActivity> activities = physicalActivityRepository.findBySoldierIdAndActivityDateBetween(
                 soldier.getId(), sevenDaysAgo, today);
 
+        int age = soldier.getAge() != null ? soldier.getAge() : 25;
+        int ageGroupYoung = (age >= 18 && age <= 25) ? 1 : 0;
+        int ageGroupMiddle = (age >= 26 && age <= 35) ? 1 : 0;
+        int ageGroupSenior = (age >= 36) ? 1 : 0;
+
+        String origin = soldier.getOriginRegion() != null ? soldier.getOriginRegion() : "NORTH";
+        int originNorth = "NORTH".equals(origin) ? 1 : 0;
+        int originSouth = "SOUTH".equals(origin) ? 1 : 0;
+        int originWest = "WEST".equals(origin) ? 1 : 0;
+
         return NutritionFeature.builder()
                 .dailyProteinG(proteinG != null ? proteinG : BigDecimal.ZERO)
                 .dailyFatG(fatG != null ? fatG : BigDecimal.ZERO)
@@ -248,6 +292,12 @@ public class NutritionPredictionService {
                 .avgProtein7d(avgProtein7d)
                 .avgFat7d(avgFat7d)
                 .avgVitaminC7d(avgVitaminC7d)
+                .ageGroupYoung(ageGroupYoung)
+                .ageGroupMiddle(ageGroupMiddle)
+                .ageGroupSenior(ageGroupSenior)
+                .originNorth(originNorth)
+                .originSouth(originSouth)
+                .originWest(originWest)
                 .build();
     }
 
@@ -262,7 +312,13 @@ public class NutritionPredictionService {
                 feature.getActivityDays(),
                 feature.getAvgProtein7d().doubleValue(),
                 feature.getAvgFat7d().doubleValue(),
-                feature.getAvgVitaminC7d().doubleValue()
+                feature.getAvgVitaminC7d().doubleValue(),
+                feature.getAgeGroupYoung(),
+                feature.getAgeGroupMiddle(),
+                feature.getAgeGroupSenior(),
+                feature.getOriginNorth(),
+                feature.getOriginSouth(),
+                feature.getOriginWest()
         };
     }
 
@@ -270,10 +326,30 @@ public class NutritionPredictionService {
                                               double fatRisk, double vitaminCRisk) {
         StringBuilder suggestion = new StringBuilder();
 
+        if (feature.getAgeGroupYoung() == 1) {
+            suggestion.append("【青年士兵（18-25岁）】代谢旺盛，营养需求偏高。\n");
+        } else if (feature.getAgeGroupMiddle() == 1) {
+            suggestion.append("【壮年士兵（26-35岁）】需维持体能储备。\n");
+        } else if (feature.getAgeGroupSenior() == 1) {
+            suggestion.append("【年长士兵（36岁以上）】消化吸收能力下降，需注意营养密度。\n");
+        }
+
+        if (feature.getOriginNorth() == 1) {
+            suggestion.append("【北方籍贯】膳食偏重面食肉食，蔬菜摄入偏少。\n");
+        } else if (feature.getOriginSouth() == 1) {
+            suggestion.append("【南方籍贯】膳食偏清淡，蛋白质摄入可能不足。\n");
+        } else if (feature.getOriginWest() == 1) {
+            suggestion.append("【西部籍贯】膳食偏杂粮，维生素多样性需关注。\n");
+        }
+        suggestion.append("\n");
+
         if (vitaminCRisk > 0.6) {
             suggestion.append("维生素C摄入严重不足（当前").append(feature.getDailyVitaminCMg().intValue())
-                    .append("mg/天，建议≥60mg），建议增加以下食物：\n")
-                    .append("  - 汉代已有：新鲜葵菜、韭菜、葱、蒜等蔬菜\n")
+                    .append("mg/天，建议≥60mg），建议增加以下食物：\n");
+            if (feature.getOriginNorth() == 1) {
+                suggestion.append("  - 北方士兵尤其需补充：酸枣、梨、萝卜叶等\n");
+            }
+            suggestion.append("  - 汉代已有：新鲜葵菜、韭菜、葱、蒜等蔬菜\n")
                     .append("  - 建议补充：酸枣、梨、桃等时令水果\n")
                     .append("  - 注意：维生素C不耐热，蔬菜不宜过度烹煮。\n\n");
         } else if (vitaminCRisk > 0.3) {
@@ -283,8 +359,14 @@ public class NutritionPredictionService {
 
         if (proteinRisk > 0.5) {
             suggestion.append("蛋白质摄入不足（当前").append(feature.getDailyProteinG().intValue())
-                    .append("g/天），建议增加：\n")
-                    .append("  - 肉类：牛肉、羊肉、猪肉等\n")
+                    .append("g/天），建议增加：\n");
+            if (feature.getOriginSouth() == 1) {
+                suggestion.append("  - 南方籍士兵推荐：鱼类、豆制品\n");
+            }
+            if (feature.getAgeGroupSenior() == 1) {
+                suggestion.append("  - 年长士兵推荐：炖煮肉类、豆腐等易消化蛋白\n");
+            }
+            suggestion.append("  - 肉类：牛肉、羊肉、猪肉等\n")
                     .append("  - 豆类：大豆、小豆等豆制品\n")
                     .append("  - 蛋类：鸡蛋、鸭蛋\n\n");
         }

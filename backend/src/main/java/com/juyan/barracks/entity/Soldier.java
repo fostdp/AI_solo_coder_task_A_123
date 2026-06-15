@@ -32,6 +32,9 @@ public class Soldier {
     @Column(length = 50)
     private String rank;
 
+    @Column(name = "origin_region", length = 20)
+    private String originRegion;
+
     @Column(nullable = false)
     private Point position;
 
